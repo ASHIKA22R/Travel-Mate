@@ -1,4 +1,8 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Turn off automatic mysqli exception throwing to catch connection errors gracefully
 if (function_exists('mysqli_report')) {
     mysqli_report(MYSQLI_REPORT_OFF);
@@ -190,6 +194,3 @@ function destination_image_url(string $image): string {
     ];
     return $map[$image] ?? $image;
 }
-?>
-
-

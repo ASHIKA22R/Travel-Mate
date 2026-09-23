@@ -1,0 +1,20 @@
+TRAVELMATE - REAL DESTINATION PHOTOS
+
+The website now uses direct JPG photograph URLs instead of SVG files containing externally embedded images. This avoids the blank-image issue in browsers/local PHP setups.
+
+India: Meenakshi Amman Temple, Madurai - Wikimedia Commons
+France: Eiffel Tower Paris Aug 2026 - Wikimedia Commons
+Indonesia: Rice Terrace View, Bali, Indonesia - Wikimedia Commons
+UAE: Burj Khalifa Image - Wikimedia Commons
+Singapore: Marina Bay Sands, 2026 - Wikimedia Commons
+South Korea: Gyeongbokgung Palace (55219197845) - Wikimedia Commons
+
+Photo pages / license information:
+https://commons.wikimedia.org/wiki/File:Meenakshi_Amman_Temple,_Madurai.jpg
+https://commons.wikimedia.org/wiki/File:Eiffel_Tower_Paris_Aug_2026.jpg
+https://commons.wikimedia.org/wiki/File:Rice_Terrace_View,_Bali,_Indonesia.jpg
+https://commons.wikimedia.org/wiki/File:Burj_Khalifa_Image.jpg
+https://commons.wikimedia.org/wiki/File:Marina_Bay_Sands,_2026.jpg
+https://commons.wikimedia.org/wiki/File:Gyeongbokgung_Palace_(55219197845).jpg
+
+Note: The website loads the photos directly from Wikimedia Commons, so an internet connection is required for the photographs to appear.

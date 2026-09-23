@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: travel-mate
+    env: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        value: travel_website
+      - key: DB_PORT
+        value: "3306"

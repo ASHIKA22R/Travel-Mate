@@ -1,5 +1,8 @@
 <?php
-// Database connection configuration with Render & Cloud MySQL support
+// Turn off automatic mysqli exception throwing to catch connection errors gracefully
+if (function_exists('mysqli_report')) {
+    mysqli_report(MYSQLI_REPORT_OFF);
+}
 
 $host = getenv('DB_HOST') ?: getenv('MYSQLHOST') ?: 'localhost';
 $user = getenv('DB_USER') ?: getenv('MYSQLUSER') ?: 'root';
@@ -22,30 +25,116 @@ if ($dbUrl) {
     }
 }
 
-// Attempt database connection
-$conn = @new mysqli($host, $user, $password, $database, $port);
+$conn = null;
+$useMysql = false;
 
-// If database connection fails, try connecting without selecting DB first (to create database locally if needed)
-if ($conn->connect_error) {
-    $conn_raw = @new mysqli($host, $user, $password, "", $port);
-    if ($conn_raw && !$conn_raw->connect_error) {
-        $conn_raw->query("CREATE DATABASE IF NOT EXISTS `$database` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        $conn_raw->select_db($database);
-        $conn = $conn_raw;
-    } else {
-        die("<div style='font-family:sans-serif;padding:30px;max-width:600px;margin:50px auto;border:1px solid #f5c6cb;background:#f8d7da;color:#721c24;border-radius:8px;'>"
-            . "<h2>Database Connection Failed</h2>"
-            . "<p>Unable to connect to MySQL database at <strong>" . htmlspecialchars($host) . "</strong>.</p>"
-            . "<p><small>Error: " . htmlspecialchars($conn->connect_error) . "</small></p>"
-            . "<hr><p>If you are deploying on Render, make sure environment variables (<code>DB_HOST</code>, <code>DB_USER</code>, <code>DB_PASSWORD</code>, <code>DB_NAME</code>, <code>DB_PORT</code>) or <code>DATABASE_URL</code> are set correctly in the Render dashboard.</p>"
-            . "</div>");
+// Attempt MySQL connection
+try {
+    $conn = @new mysqli($host, $user, $password, $database, $port);
+    if ($conn && !$conn->connect_error) {
+        $useMysql = true;
     }
+} catch (Throwable $e) {
+    $conn = null;
 }
 
-$conn->set_charset("utf8mb4");
+// If MySQL is not available, transparently use SQLite for zero-config Render deployment!
+if (!$useMysql) {
+    class SQLiteResultAdapter {
+        public int $num_rows;
+        private array $rows;
+        private int $pointer = 0;
+
+        public function __construct(array $rows) {
+            $this->rows = array_values($rows);
+            $this->num_rows = count($rows);
+        }
+
+        public function fetch_assoc(): ?array {
+            if ($this->pointer < $this->num_rows) {
+                return $this->rows[$this->pointer++];
+            }
+            return null;
+        }
+    }
+
+    class SQLiteStmtAdapter {
+        private PDO $pdo;
+        private string $sql;
+        private array $params = [];
+        public ?int $insert_id = null;
+        private ?array $executedRows = null;
+
+        public function __construct(PDO $pdo, string $sql) {
+            $this->pdo = $pdo;
+            $this->sql = $sql;
+        }
+
+        public function bind_param(string $types, &...$vars): bool {
+            $this->params = $vars;
+            return true;
+        }
+
+        public function execute(): bool {
+            $stmt = $this->pdo->prepare($this->sql);
+            $res = $stmt->execute($this->params);
+            if (stristr($this->sql, 'INSERT')) {
+                $this->insert_id = (int)$this->pdo->lastInsertId();
+            } else {
+                $this->executedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            return $res;
+        }
+
+        public function get_result(): SQLiteResultAdapter {
+            return new SQLiteResultAdapter($this->executedRows ?? []);
+        }
+    }
+
+    class SQLiteDbAdapter {
+        public ?string $connect_error = null;
+        private PDO $pdo;
+
+        public function __construct(string $filepath) {
+            $this->pdo = new PDO('sqlite:' . $filepath);
+            $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        }
+
+        public function set_charset(string $charset): bool {
+            return true;
+        }
+
+        public function query(string $sql) {
+            if (preg_match('/^\s*(CREATE|INSERT|UPDATE|DELETE|DROP|ALTER)/i', $sql)) {
+                $sqliteSql = str_replace(
+                    ['INT AUTO_INCREMENT PRIMARY KEY', 'VARCHAR(100)', 'VARCHAR(150)', 'VARCHAR(20)', 'VARCHAR(255)', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP', 'DECIMAL(10,2)'],
+                    ['INTEGER PRIMARY KEY AUTOINCREMENT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'DATETIME DEFAULT CURRENT_TIMESTAMP', 'NUMERIC'],
+                    $sql
+                );
+                $this->pdo->exec($sqliteSql);
+                return true;
+            }
+
+            $stmt = $this->pdo->query($sql);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return new SQLiteResultAdapter($rows);
+        }
+
+        public function prepare(string $sql): SQLiteStmtAdapter {
+            return new SQLiteStmtAdapter($this->pdo, $sql);
+        }
+    }
+
+    $sqlitePath = is_writable(__DIR__) ? __DIR__ . '/travel_website.sqlite' : sys_get_temp_dir() . '/travel_website.sqlite';
+    $conn = new SQLiteDbAdapter($sqlitePath);
+}
+
+if ($conn && method_exists($conn, 'set_charset')) {
+    $conn->set_charset("utf8mb4");
+}
 
 // Auto-initialize schema & seed data if tables are missing
-$checkTable = $conn->query("SHOW TABLES LIKE 'destinations'");
+$checkTable = $conn->query($useMysql ? "SHOW TABLES LIKE 'destinations'" : "SELECT name FROM sqlite_master WHERE type='table' AND name='destinations'");
 if ($checkTable && $checkTable->num_rows === 0) {
     $conn->query("CREATE TABLE IF NOT EXISTS destinations (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -102,4 +191,5 @@ function destination_image_url(string $image): string {
     return $map[$image] ?? $image;
 }
 ?>
+
 
